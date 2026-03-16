@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CricketVision — AI-Powered Cricket Analytics</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════
+   TOKENS
+═══════════════════════════════════════ */
+:root {
+  --green-900:#04342C; --green-800:#085041; --green-700:#0F6E56;
+  --green-500:#1D9E75; --green-300:#5DCAA5; --green-100:#9FE1CB; --green-50:#E1F5EE;
+  --slate-950:#080d0b; --slate-900:#0e1714; --slate-800:#162019;
+  --slate-700:#1e2e26; --slate-600:#2a3f35; --slate-400:#5a7a6e;
+  --slate-200:#a8bdb6; --slate-100:#d4e0db; --white:#f5faf8;
+  --accent:#5DCAA5; --danger:#e05c5c;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:'Instrument Sans',sans-serif;background:var(--slate-950);color:var(--slate-100);line-height:1.6;overflow-x:hidden;cursor:none}
+a,button,input,textarea,select,label{cursor:none}
+
+/* ═══════════════════════════════════════
+   CRICKET BALL CURSOR
+═══════════════════════════════════════ */
+#cv-cursor{position:fixed;top:0;left:0;z-index:99999;width:28px;height:28px;border-radius:50%;pointer-events:none;transform:translate(-50%,-50%);transition:width .2s,height .2s;will-change:transform}
+#cv-cursor svg{width:100%;height:100%}
+#cv-cursor.clicking{transform:translate(-50%,-50%) scale(0.72)!important}
+#cv-cursor.hovering{width:38px;height:38px}
+#cv-trail{position:fixed;top:0;left:0;z-index:99998;pointer-events:none;width:12px;height:12px;border-radius:50%;background:rgba(93,202,165,.22);transform:translate(-50%,-50%);will-change:transform}
+
+/* ═══════════════════════════════════════
+   SHARED EFFECTS
+═══════════════════════════════════════ */
+.cv-ripple{position:absolute;border-radius:50%;background:rgba(93,202,165,.25);transform:scale(0);animation:cvRipple .55s ease-out forwards;pointer-events:none}
+@keyframes cvRipple{to{transform:scale(4);opacity:0}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+/* ═══════════════════════════════════════
+   PAGE WRAPPER — login on top, main below
+═══════════════════════════════════════ */
+#login-page{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;background:var(--slate-950);transition:opacity .6s ease,transform .6s ease;overflow-y:auto}
+#login-page.exit{opacity:0;transform:scale(1.04);pointer-events:none}
+#main-page{opacity:0;transition:opacity .7s ease .3s;pointer-events:none}
+#main-page.active{opacity:1;pointer-events:all}
+
+/* ── shared bg effects ── */
+.page-bg{position:fixed;inset:0;z-index:0;pointer-events:none;background:radial-gradient(ellipse 55% 50% at 15% 50%,rgba(15,110,86,.14) 0%,transparent 65%),radial-gradient(ellipse 45% 55% at 85% 50%,rgba(29,158,117,.08) 0%,transparent 60%)}
+.page-grid{position:fixed;inset:0;z-index:0;pointer-events:none;background-image:linear-gradient(rgba(93,202,165,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(93,202,165,.04) 1px,transparent 1px);background-size:60px 60px;mask-image:radial-gradient(ellipse 100% 100% at 50% 50%,black 20%,transparent 100%)}
+
+/* ═══════════════════════════════════════
+   LOGIN — NAV
+═══════════════════════════════════════ */
+#login-page nav{position:relative;z-index:10;display:flex;align-items:center;justify-content:space-between;padding:1.25rem 4rem;background:rgba(8,13,11,.85);backdrop-filter:blur(12px);border-bottom:1px solid rgba(93,202,165,.1)}
+.nav-logo{display:flex;align-items:center;gap:10px;font-family:'Syne',sans-serif;font-weight:800;font-size:1.15rem;color:var(--white);text-decoration:none;letter-spacing:-.5px}
+.nav-logo-icon{width:34px;height:34px;border-radius:8px;background:var(--green-700);display:flex;align-items:center;justify-content:center;transition:transform .3s cubic-bezier(.34,1.56,.64,1)}
+.nav-logo:hover .nav-logo-icon{transform:translateY(-4px) rotate(15deg)}
+.nav-logo-icon svg{width:18px;height:18px}
+
+/* ═══════════════════════════════════════
+   LOGIN — LAYOUT
+═══════════════════════════════════════ */
+.login-main{position:relative;z-index:1;flex:1;display:grid;grid-template-columns:1fr 1fr;min-height:calc(100vh - 68px)}
+.left-panel{display:flex;flex-direction:column;justify-content:center;padding:4rem 5rem 4rem 6rem;border-right:1px solid rgba(93,202,165,.08)}
+.left-tag{display:inline-flex;align-items:center;gap:8px;font-size:.72rem;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--green-300);border:1px solid rgba(93,202,165,.25);padding:.4rem 1rem;border-radius:20px;margin-bottom:2rem;animation:fadeUp .5s ease both}
+.left-dot{width:6px;height:6px;border-radius:50%;background:var(--green-300);animation:pulse 2s infinite}
+.left-panel h1{font-family:'Syne',sans-serif;font-weight:800;font-size:clamp(2rem,3.5vw,3.2rem);line-height:1.08;letter-spacing:-1.5px;color:var(--white);margin-bottom:1.25rem;animation:fadeUp .5s .08s ease both}
+.left-panel h1 em{font-style:normal;color:var(--green-300)}
+.left-desc{font-size:1rem;color:var(--slate-200);line-height:1.75;max-width:420px;margin-bottom:3rem;animation:fadeUp .5s .16s ease both}
+.feature-pills{display:flex;flex-direction:column;gap:.875rem;animation:fadeUp .5s .24s ease both}
+.feature-pill{display:flex;align-items:center;gap:12px;padding:.75rem 1.1rem;background:rgba(15,110,86,.1);border:1px solid rgba(93,202,165,.12);border-radius:10px;transition:transform .25s cubic-bezier(.34,1.56,.64,1),background .2s,border-color .2s}
+.feature-pill:hover{transform:translateX(6px);background:rgba(15,110,86,.2);border-color:rgba(93,202,165,.25)}
+.pill-icon{width:32px;height:32px;border-radius:8px;flex-shrink:0;background:rgba(15,110,86,.35);display:flex;align-items:center;justify-content:center;transition:transform .4s cubic-bezier(.34,1.56,.64,1)}
+.feature-pill:hover .pill-icon{transform:rotate(20deg) scale(1.15)}
+.pill-icon svg{width:15px;height:15px;stroke:var(--green-300)}
+.pill-text{font-size:.875rem;color:var(--slate-100);font-weight:500}
+.left-stats{display:flex;gap:2.5rem;margin-top:3rem;padding-top:2.5rem;border-top:1px solid rgba(255,255,255,.07);animation:fadeUp .5s .32s ease both}
+.lst-val{font-family:'Syne',sans-serif;font-weight:800;font-size:1.6rem;color:var(--white);letter-spacing:-1px;line-height:1;display:inline-block;transition:transform .25s cubic-bezier(.34,1.56,.64,1),color .2s}
+.left-stats>div:hover .lst-val{transform:scale(1.12);color:var(--green-300)}
+.lst-val span{color:var(--green-300)}
+.lst-label{font-size:.75rem;color:var(--slate-400);margin-top:3px}
+
+/* ═══════════════════════════════════════
+   LOGIN — FORM PANEL
+═══════════════════════════════════════ */
+.right-panel{display:flex;flex-direction:column;justify-content:center;padding:4rem 6rem 4rem 5rem}
+.form-box{width:100%;max-width:400px;animation:fadeUp .5s .1s ease both}
+.form-header{margin-bottom:2.25rem}
+.form-title{font-family:'Syne',sans-serif;font-weight:800;font-size:1.75rem;letter-spacing:-.8px;color:var(--white);margin-bottom:.5rem}
+.form-subtitle{font-size:.875rem;color:var(--slate-400)}
+.form-subtitle a{color:var(--green-300);text-decoration:none;transition:color .2s}
+.form-subtitle a:hover{color:var(--green-100)}
+.auth-tabs{display:flex;margin-bottom:2rem;border:1px solid rgba(93,202,165,.15);border-radius:10px;overflow:hidden;background:var(--slate-900)}
+.auth-tab{flex:1;padding:.65rem 1rem;font-family:'Syne',sans-serif;font-weight:600;font-size:.82rem;letter-spacing:.3px;cursor:none;border:none;background:transparent;color:var(--slate-400);transition:background .2s,color .2s;position:relative;overflow:hidden}
+.auth-tab.active{background:var(--green-800);color:var(--green-100)}
+.l-form-group{display:flex;flex-direction:column;gap:7px;margin-bottom:1.1rem}
+.form-label{font-size:.75rem;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--slate-200)}
+.input-wrap{position:relative}
+.input-wrap svg.field-ico{position:absolute;left:13px;top:50%;transform:translateY(-50%);width:16px;height:16px;stroke:var(--slate-400);pointer-events:none;transition:stroke .2s}
+.input-wrap input{width:100%;background:var(--slate-800);border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:.78rem 1rem .78rem 2.6rem;color:var(--white);font-family:'Instrument Sans',sans-serif;font-size:.9rem;outline:none;transition:border-color .2s,background .2s,box-shadow .2s}
+.input-wrap input::placeholder{color:var(--slate-400)}
+.input-wrap input:focus{border-color:var(--green-500);background:var(--slate-700);box-shadow:0 0 0 3px rgba(29,158,117,.15)}
+.input-wrap input:focus~svg.field-ico{stroke:var(--green-300)}
+.eye-btn{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;padding:2px;display:flex;align-items:center;stroke:var(--slate-400);transition:stroke .2s}
+.eye-btn:hover{stroke:var(--green-300)}
+.eye-btn svg{width:16px;height:16px;stroke:inherit;fill:none;stroke-width:1.8;stroke-linecap:round}
+.field-error{font-size:.75rem;color:var(--danger);display:none;margin-top:2px}
+.l-form-group.has-error .input-wrap input{border-color:var(--danger)}
+.l-form-group.has-error .field-error{display:block}
+.options-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem}
+.checkbox-wrap{display:flex;align-items:center;gap:8px}
+.checkbox-wrap input[type=checkbox]{width:15px;height:15px;accent-color:var(--green-500);padding:0}
+.checkbox-wrap span{font-size:.82rem;color:var(--slate-200)}
+.forgot-link{font-size:.82rem;color:var(--green-300);text-decoration:none;transition:color .2s}
+.forgot-link:hover{color:var(--green-100)}
+.register-fields{display:none}
+.register-fields.active{display:block}
+.strength-bar{display:flex;gap:4px;margin-top:6px}
+.strength-seg{flex:1;height:3px;border-radius:2px;background:rgba(255,255,255,.08);transition:background .3s}
+.btn-submit{width:100%;background:var(--green-500);color:var(--slate-950);font-family:'Syne',sans-serif;font-weight:700;font-size:.95rem;letter-spacing:.2px;padding:.9rem 1.5rem;border-radius:9px;border:none;display:flex;align-items:center;justify-content:center;gap:8px;transition:background .2s,transform .15s;margin-bottom:1.5rem;position:relative;overflow:hidden}
+.btn-submit:hover{background:var(--green-300);transform:translateY(-1px)}
+.btn-submit::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.15),transparent);transform:translateX(-100%)}
+.btn-submit:hover::after{transform:translateX(100%);transition:transform .4s ease}
+.btn-submit.loading{pointer-events:none;opacity:.75}
+.btn-submit svg{width:16px;height:16px;stroke:currentColor;flex-shrink:0}
+.divider{display:flex;align-items:center;gap:12px;margin-bottom:1.5rem}
+.divider-line{flex:1;height:1px;background:rgba(255,255,255,.08)}
+.divider-text{font-size:.75rem;color:var(--slate-400);white-space:nowrap}
+.social-btns{display:flex;gap:.75rem;margin-bottom:1.5rem}
+.btn-social{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--slate-800);border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:.72rem 1rem;font-family:'Instrument Sans',sans-serif;font-size:.82rem;font-weight:500;color:var(--slate-200);text-decoration:none;transition:border-color .2s,background .2s,color .2s;position:relative;overflow:hidden}
+.btn-social:hover{border-color:rgba(93,202,165,.3);color:var(--white);background:var(--slate-700)}
+.btn-social::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.08),transparent);transform:translateX(-100%)}
+.btn-social:hover::after{transform:translateX(100%);transition:transform .45s ease}
+.btn-social svg{width:16px;height:16px;flex-shrink:0}
+.success-screen{display:none;flex-direction:column;align-items:center;text-align:center;padding:2rem 0}
+.success-icon{width:64px;height:64px;border-radius:50%;background:rgba(29,158,117,.15);border:2px solid var(--green-500);display:flex;align-items:center;justify-content:center;margin-bottom:1.5rem}
+.success-icon svg{width:28px;height:28px;stroke:var(--green-300)}
+.success-title{font-family:'Syne',sans-serif;font-weight:800;font-size:1.4rem;color:var(--white);margin-bottom:.5rem}
+.success-msg{font-size:.9rem;color:var(--slate-200);line-height:1.6}
+.login-footer{position:relative;z-index:1;background:var(--slate-900);border-top:1px solid rgba(93,202,165,.08);padding:1.5rem 4rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem}
+.login-footer .footer-copy{font-size:.78rem;color:var(--slate-400)}
+.login-footer .footer-links{display:flex;gap:1.5rem}
+.login-footer .footer-links a{font-size:.78rem;color:var(--slate-400);text-decoration:none;transition:color .2s}
+.login-footer .footer-links a:hover{color:var(--green-300)}
+/* role select */
+.role-select{width:100%;background:var(--slate-800);border:1px solid rgba(255,255,255,.1);border-radius:9px;padding:.78rem 1rem .78rem 2.6rem;color:var(--white);font-family:'Instrument Sans',sans-serif;font-size:.9rem;outline:none;appearance:none;transition:border-color .2s}
+.role-select:focus{border-color:var(--green-500)}
+
+/* ═══════════════════════════════════════
+   MAIN SITE — NAV
+═══════════════════════════════════════ */
+#main-nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:1.25rem 4rem;background:rgba(8,13,11,.85);backdrop-filter:blur(12px);border-bottom:1px solid rgba(93,202,165,.1)}
+.main-nav-logo{display:flex;align-items:center;gap:10px;font-family:'Syne',sans-serif;font-weight:800;font-size:1.15rem;color:var(--white);text-decoration:none;letter-spacing:-.5px}
+.main-nav-logo .nav-logo-icon{transition:transform .3s cubic-bezier(.34,1.56,.64,1)}
+.main-nav-logo:hover .nav-logo-icon{transform:translateY(-4px) rotate(15deg)}
+.nav-links{display:flex;gap:2.5rem;list-style:none}
+.nav-links a{font-size:.875rem;font-weight:500;color:var(--slate-200);text-decoration:none;letter-spacing:.3px;transition:color .2s}
+.nav-links a:hover{color:var(--accent)}
+.nav-cta{background:var(--green-700);color:var(--white)!important;padding:.5rem 1.25rem;border-radius:6px;transition:background .2s!important;position:relative;overflow:hidden}
+.nav-cta:hover{background:var(--green-500)!important}
+.nav-cta::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.12),transparent);transform:translateX(-100%)}
+.nav-cta:hover::after{transform:translateX(100%);transition:transform .4s ease}
+/* logout btn */
+.nav-logout{display:flex;align-items:center;gap:6px;font-size:.8rem;font-weight:500;color:var(--slate-400);background:none;border:1px solid rgba(255,255,255,.1);padding:.4rem .9rem;border-radius:6px;transition:color .2s,border-color .2s}
+.nav-logout:hover{color:var(--danger);border-color:var(--danger)}
+
+/* ═══════════════════════════════════════
+   MAIN SITE — HERO
+═══════════════════════════════════════ */
+#hero{min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:8rem 4rem 4rem;position:relative;overflow:hidden}
+.hero-bg{position:absolute;inset:0;z-index:0;background:radial-gradient(ellipse 60% 50% at 70% 40%,rgba(15,110,86,.18) 0%,transparent 70%),radial-gradient(ellipse 40% 60% at 10% 70%,rgba(29,158,117,.08) 0%,transparent 60%)}
+.hero-grid-bg{position:absolute;inset:0;z-index:0;background-image:linear-gradient(rgba(93,202,165,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(93,202,165,.04) 1px,transparent 1px);background-size:60px 60px;mask-image:radial-gradient(ellipse 80% 80% at 50% 50%,black 20%,transparent 100%)}
+.hero-content{position:relative;z-index:1;max-width:760px}
+.hero-tag{display:inline-flex;align-items:center;gap:8px;font-size:.75rem;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--green-300);border:1px solid rgba(93,202,165,.25);padding:.4rem 1rem;border-radius:20px;margin-bottom:2rem;animation:fadeUp .6s ease both}
+.hero-tag-dot{width:6px;height:6px;border-radius:50%;background:var(--green-300);animation:pulse 2s infinite}
+#hero h1{font-family:'Syne',sans-serif;font-weight:800;font-size:clamp(2.8rem,6vw,5rem);line-height:1.05;letter-spacing:-2px;color:var(--white);margin-bottom:1.5rem;animation:fadeUp .6s .1s ease both}
+#hero h1 em{font-style:normal;color:var(--green-300)}
+.hero-desc{font-size:1.125rem;color:var(--slate-200);max-width:560px;line-height:1.75;margin-bottom:2.5rem;animation:fadeUp .6s .2s ease both}
+.hero-actions{display:flex;gap:1rem;flex-wrap:wrap;animation:fadeUp .6s .3s ease both}
+.btn-primary{display:inline-flex;align-items:center;gap:8px;background:var(--green-500);color:var(--slate-950);font-family:'Syne',sans-serif;font-weight:700;font-size:.9rem;padding:.85rem 2rem;border-radius:8px;text-decoration:none;letter-spacing:.2px;transition:background .2s,transform .15s;position:relative;overflow:hidden}
+.btn-primary:hover{background:var(--green-300);transform:translateY(-1px)}
+.btn-primary::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.12),transparent);transform:translateX(-100%)}
+.btn-primary:hover::after{transform:translateX(100%);transition:transform .4s ease}
+.btn-secondary{display:inline-flex;align-items:center;gap:8px;background:transparent;color:var(--slate-100);font-family:'Syne',sans-serif;font-weight:600;font-size:.9rem;padding:.85rem 2rem;border-radius:8px;text-decoration:none;border:1px solid rgba(255,255,255,.15);transition:border-color .2s,color .2s;position:relative;overflow:hidden}
+.btn-secondary:hover{border-color:var(--green-300);color:var(--green-300)}
+.btn-secondary::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.12),transparent);transform:translateX(-100%)}
+.btn-secondary:hover::after{transform:translateX(100%);transition:transform .4s ease}
+.hero-stats{display:flex;gap:3rem;margin-top:4rem;padding-top:3rem;border-top:1px solid rgba(255,255,255,.08);animation:fadeUp .6s .4s ease both}
+.hero-stat-val{font-family:'Syne',sans-serif;font-weight:800;font-size:2rem;color:var(--white);letter-spacing:-1px;line-height:1}
+.hero-stat-val span{color:var(--green-300)}
+.hero-stat-label{font-size:.8rem;color:var(--slate-400);margin-top:4px;letter-spacing:.3px}
+
+/* ═══════════════════════════════════════
+   MARQUEE
+═══════════════════════════════════════ */
+.marquee-wrap{overflow:hidden;padding:1.5rem 0;border-top:1px solid rgba(93,202,165,.1);border-bottom:1px solid rgba(93,202,165,.1);background:var(--slate-900)}
+.marquee{display:flex;gap:3rem;width:max-content;animation:marqueeAnim 30s linear infinite}
+.marquee-item{font-family:'Syne',sans-serif;font-size:.8rem;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--slate-400);white-space:nowrap;display:flex;align-items:center;gap:12px}
+.marquee-dot{width:4px;height:4px;border-radius:50%;background:var(--green-700)}
+@keyframes marqueeAnim{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+
+/* ═══════════════════════════════════════
+   MAIN SITE — SECTIONS COMMON
+═══════════════════════════════════════ */
+section{padding:6rem 4rem}
+.section-tag{font-size:.72rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--green-500);margin-bottom:1rem}
+.section-title{font-family:'Syne',sans-serif;font-weight:800;font-size:clamp(1.8rem,3.5vw,2.8rem);line-height:1.1;letter-spacing:-1px;color:var(--white);margin-bottom:1rem}
+.section-subtitle{font-size:1rem;color:var(--slate-200);max-width:540px;line-height:1.7}
+.reveal{opacity:0;transform:translateY(20px);transition:opacity .6s ease,transform .6s ease}
+.reveal.visible{opacity:1;transform:none}
+
+/* ═══════════════════════════════════════
+   FEATURES
+═══════════════════════════════════════ */
+#features{background:var(--slate-900)}
+.features-header{margin-bottom:4rem}
+.features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5px;background:rgba(93,202,165,.08);border:1px solid rgba(93,202,165,.08);border-radius:16px;overflow:hidden}
+.feature-card{background:var(--slate-900);padding:2.5rem 2rem;transition:background .2s;position:relative;overflow:hidden}
+.feature-card:hover{background:var(--slate-800);animation:wicketShake .4s ease}
+@keyframes wicketShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-3px) rotate(-.5deg)}40%{transform:translateX(3px) rotate(.5deg)}60%{transform:translateX(-2px)}80%{transform:translateX(2px)}}
+.feature-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--green-700),transparent);opacity:0;transition:opacity .3s}
+.feature-card:hover::before{opacity:1}
+.feature-icon{width:46px;height:46px;border-radius:10px;background:rgba(15,110,86,.25);border:1px solid rgba(93,202,165,.2);display:flex;align-items:center;justify-content:center;margin-bottom:1.5rem;transition:transform .3s cubic-bezier(.34,1.56,.64,1),box-shadow .3s}
+.feature-card:hover .feature-icon{transform:rotate(-8deg) scale(1.15);box-shadow:0 0 16px rgba(93,202,165,.25)}
+.feature-icon svg{width:22px;height:22px;stroke:var(--green-300)}
+.feature-title{font-family:'Syne',sans-serif;font-weight:700;font-size:1.05rem;color:var(--white);margin-bottom:.75rem;letter-spacing:-.3px}
+.feature-desc{font-size:.9rem;color:var(--slate-200);line-height:1.65}
+
+/* ═══════════════════════════════════════
+   STATS
+═══════════════════════════════════════ */
+#stats{background:var(--slate-950);position:relative;overflow:hidden}
+.stats-bg{position:absolute;inset:0;background:radial-gradient(ellipse 50% 60% at 50% 50%,rgba(15,110,86,.12) 0%,transparent 70%)}
+.stats-inner{position:relative;z-index:1}
+.stats-header{text-align:center;margin-bottom:4rem}
+.stats-header .section-subtitle{margin:0 auto}
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:4rem}
+.stat-card{background:var(--slate-800);border:1px solid rgba(93,202,165,.1);border-radius:12px;padding:2rem 1.5rem;text-align:center;position:relative;overflow:hidden;transition:border-color .2s,transform .2s}
+.stat-card:hover{border-color:rgba(93,202,165,.35);transform:translateY(-3px)}
+.stat-card::after{content:'';position:absolute;inset:0;background:linear-gradient(120deg,transparent 30%,rgba(93,202,165,.08) 50%,transparent 70%);transform:translateX(-100%);transition:transform 0s}
+.stat-card:hover::after{transform:translateX(100%);transition:transform .5s ease}
+.stat-num{font-family:'Syne',sans-serif;font-weight:800;font-size:2.4rem;color:var(--white);line-height:1;letter-spacing:-1.5px;margin-bottom:.5rem}
+.stat-num em{font-style:normal;color:var(--green-300)}
+.stat-label{font-size:.82rem;color:var(--slate-400);letter-spacing:.3px}
+.accuracy-row{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem}
+.acc-block{background:var(--slate-800);border:1px solid rgba(93,202,165,.1);border-radius:12px;padding:2rem}
+.acc-title{font-family:'Syne',sans-serif;font-weight:700;font-size:.95rem;color:var(--white);margin-bottom:1.5rem;letter-spacing:-.3px}
+.acc-bar-row{margin-bottom:.9rem}
+.acc-bar-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px}
+.acc-bar-name{font-size:.8rem;color:var(--slate-200)}
+.acc-bar-pct{font-family:'Syne',sans-serif;font-size:.8rem;font-weight:700;color:var(--green-300)}
+.acc-track{height:5px;background:rgba(255,255,255,.07);border-radius:3px;overflow:hidden}
+.acc-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--green-700),var(--green-300))}
+
+/* ═══════════════════════════════════════
+   PIPELINE
+═══════════════════════════════════════ */
+#pipeline{background:var(--slate-900)}
+.pipeline-header{margin-bottom:4rem}
+.pipeline-steps{display:flex;gap:0;position:relative}
+.pipeline-steps::before{content:'';position:absolute;top:2.5rem;left:2rem;right:2rem;height:2px;background:linear-gradient(90deg,var(--green-900),var(--green-700),var(--green-900));z-index:0}
+.pipeline-step{flex:1;text-align:center;position:relative;z-index:1;padding:0 1rem}
+.step-circle{width:48px;height:48px;border-radius:50%;background:var(--slate-800);border:2px solid var(--green-700);display:flex;align-items:center;justify-content:center;margin:0 auto 1.5rem;font-family:'Syne',sans-serif;font-weight:800;font-size:.9rem;color:var(--green-300);position:relative;z-index:2;transition:background .2s,border-color .2s,box-shadow .3s}
+.pipeline-step:hover .step-circle{background:var(--green-800);border-color:var(--green-300);box-shadow:0 0 0 6px rgba(93,202,165,.15),0 0 0 12px rgba(93,202,165,.06)}
+.step-title{font-family:'Syne',sans-serif;font-weight:700;font-size:.95rem;color:var(--white);margin-bottom:.5rem;letter-spacing:-.2px}
+.step-desc{font-size:.82rem;color:var(--slate-400);line-height:1.6}
+
+/* ═══════════════════════════════════════
+   CONTACT
+═══════════════════════════════════════ */
+#contact{background:var(--slate-950)}
+.contact-grid{display:grid;grid-template-columns:1fr 1fr;gap:5rem;align-items:start}
+.contact-info .section-title{margin-bottom:1.25rem}
+.contact-info .section-subtitle{margin-bottom:2.5rem}
+.contact-detail{display:flex;align-items:flex-start;gap:1rem;margin-bottom:1.5rem}
+.contact-detail-icon{width:38px;height:38px;border-radius:8px;flex-shrink:0;background:rgba(15,110,86,.25);border:1px solid rgba(93,202,165,.2);display:flex;align-items:center;justify-content:center}
+.contact-detail-icon svg{width:18px;height:18px;stroke:var(--green-300)}
+.contact-detail-label{font-size:.75rem;color:var(--slate-400);text-transform:uppercase;letter-spacing:.6px}
+.contact-detail-val{font-size:.9rem;color:var(--white);margin-top:2px}
+.contact-form{display:flex;flex-direction:column;gap:1rem}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.form-group{display:flex;flex-direction:column;gap:6px}
+label{font-size:.78rem;font-weight:600;color:var(--slate-200);letter-spacing:.4px;text-transform:uppercase}
+input[type=text],input[type=email],textarea,select{background:var(--slate-800);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:.75rem 1rem;color:var(--white);font-family:'Instrument Sans',sans-serif;font-size:.9rem;outline:none;transition:border-color .2s;resize:vertical;width:100%}
+input[type=text]::placeholder,input[type=email]::placeholder,textarea::placeholder{color:var(--slate-400)}
+input[type=text]:focus,input[type=email]:focus,textarea:focus,select:focus{border-color:var(--green-500)}
+textarea{min-height:120px}
+.form-submit{background:var(--green-500);color:var(--slate-950);font-family:'Syne',sans-serif;font-weight:700;font-size:.95rem;padding:.9rem 2rem;border-radius:8px;border:none;display:flex;align-items:center;justify-content:center;gap:8px;transition:background .2s,transform .15s;letter-spacing:.2px;position:relative;overflow:hidden}
+.form-submit:hover{background:var(--green-300);transform:translateY(-1px)}
+
+/* ═══════════════════════════════════════
+   FOOTER
+═══════════════════════════════════════ */
+footer{background:var(--slate-900);border-top:1px solid rgba(93,202,165,.08);padding:3rem 4rem;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1.5rem}
+.footer-copy{font-size:.82rem;color:var(--slate-400)}
+.footer-links{display:flex;gap:2rem}
+.footer-links a{font-size:.82rem;color:var(--slate-400);text-decoration:none;transition:color .2s}
+.footer-links a:hover{color:var(--green-300)}
+
+/* ═══════════════════════════════════════
+   RESPONSIVE
+═══════════════════════════════════════ */
+@media(max-width:900px){
+  #main-nav,#login-page nav{padding:1rem 1.5rem}
+  .nav-links{display:none}
+  section{padding:4rem 1.5rem}
+  #hero{padding:7rem 1.5rem 3rem}
+  .features-grid{grid-template-columns:1fr}
+  .stats-grid{grid-template-columns:repeat(2,1fr)}
+  .accuracy-row,.contact-grid{grid-template-columns:1fr}
+  .pipeline-steps{flex-direction:column;gap:2rem}
+  .pipeline-steps::before{display:none}
+  .hero-stats{gap:2rem;flex-wrap:wrap}
+  footer,.login-footer{flex-direction:column;align-items:flex-start;padding:2rem 1.5rem}
+  .login-main{grid-template-columns:1fr}
+  .left-panel{display:none}
+  .right-panel{padding:3rem 1.5rem;align-items:center}
+  .form-box{max-width:100%}
+  .form-row{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ CURSOR ═══ -->
+<div id="cv-cursor">
+  <svg viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="14" cy="14" r="13" fill="#c8392b" stroke="#8b1a0e" stroke-width="1"/>
+    <path d="M14 1 Q20 7 20 14 Q20 21 14 27" fill="none" stroke="#f5e6d3" stroke-width="1.2" stroke-linecap="round"/>
+    <path d="M14 1 Q8 7 8 14 Q8 21 14 27" fill="none" stroke="#f5e6d3" stroke-width="1.2" stroke-linecap="round"/>
+    <path d="M10 6 Q9 8 10 10" fill="none" stroke="#f5e6d3" stroke-width="0.7"/>
+    <path d="M9.5 11 Q8.5 13 9.5 15" fill="none" stroke="#f5e6d3" stroke-width="0.7"/>
+    <path d="M10 17 Q9 19 10 21" fill="none" stroke="#f5e6d3" stroke-width="0.7"/>
+    <path d="M18 6 Q19 8 18 10" fill="none" stroke="#f5e6d3" stroke-width="0.7"/>
+    <path d="M18.5 11 Q19.5 13 18.5 15" fill="none" stroke="#f5e6d3" stroke-width="0.7"/>
+    <path d="M18 17 Q19 19 18 21" fill="none" stroke="#f5e6d3" stroke-width="0.7"/>
+    <ellipse cx="10" cy="9" rx="3" ry="2" fill="rgba(255,255,255,0.18)" transform="rotate(-20,10,9)"/>
+  </svg>
+</div>
+<div id="cv-trail"></div>
+
+<!-- ═══════════════════════════════════════════════════
+     LOGIN PAGE
+═══════════════════════════════════════════════════ -->
+<div id="login-page">
+  <div class="page-bg"></div>
+  <div class="page-grid"></div>
+
+  <nav>
+    <a href="#" class="nav-logo">
+      <div class="nav-logo-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
+          <circle cx="12" cy="12" r="5"/><path d="M3 12h2M19 12h2M12 3v2M12 19v2"/>
+        </svg>
+      </div>
+      CricketVision
+    </a>
+    <span style="font-size:.82rem;color:var(--slate-400)">Sign in to continue</span>
+  </nav>
+
+  <div class="login-main">
+    <!-- LEFT -->
+    <div class="left-panel">
+      <div class="left-tag"><div class="left-dot"></div>AI-Powered · Real-time · Broadcast-ready</div>
+      <h1>Your match data,<br><em>on demand.</em></h1>
+      <p class="left-desc">Sign in to access your personalised cricket analytics dashboard — delivery classifications, ball tracking replays, and coaching insights from every match.</p>
+      <div class="feature-pills">
+        <div class="feature-pill">
+          <div class="pill-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M3 12h2M19 12h2M12 3v2M12 19v2"/></svg></div>
+          <span class="pill-text">Real-time ball tracking & trajectory analysis</span>
+        </div>
+        <div class="feature-pill">
+          <div class="pill-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div>
+          <span class="pill-text">Automatic FPV shot extraction from broadcasts</span>
+        </div>
+        <div class="feature-pill">
+          <div class="pill-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
+          <span class="pill-text">Full-pitched, good-length & short delivery labels</span>
+        </div>
+        <div class="feature-pill">
+          <div class="pill-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>
+          <span class="pill-text">Coaching dashboards & player performance reports</span>
+        </div>
+      </div>
+      <div class="left-stats">
+        <div><div class="lst-val">99.96<span>%</span></div><div class="lst-label">Accuracy</div></div>
+        <div><div class="lst-val">197<span>fps</span></div><div class="lst-label">Inference speed</div></div>
+        <div><div class="lst-val">1,446</div><div class="lst-label">Shots analysed</div></div>
+      </div>
+    </div>
+
+    <!-- RIGHT -->
+    <div class="right-panel">
+      <div class="form-box">
+        <div class="form-header">
+          <div class="form-title" id="formTitle">Welcome back</div>
+          <div class="form-subtitle" id="formSubtitle">No account? <a href="#" onclick="switchTab('register');return false;">Create one free</a></div>
+        </div>
+        <div class="auth-tabs">
+          <button class="auth-tab active" id="tab-login" onclick="switchTab('login')">Sign in</button>
+          <button class="auth-tab" id="tab-register" onclick="switchTab('register')">Register</button>
+        </div>
+
+        <form id="authForm" onsubmit="handleSubmit(event)" novalidate>
+          <!-- name row (register only) -->
+          <div class="register-fields" id="nameFields">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div class="l-form-group">
+                <label class="form-label">First name</label>
+                <div class="input-wrap">
+                  <input type="text" id="fname" placeholder="Alex">
+                  <svg class="field-ico" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                </div>
+              </div>
+              <div class="l-form-group">
+                <label class="form-label">Last name</label>
+                <div class="input-wrap">
+                  <input type="text" id="lname" placeholder="Kumar">
+                  <svg class="field-ico" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- email -->
+          <div class="l-form-group" id="emailGroup">
+            <label class="form-label">Email address</label>
+            <div class="input-wrap">
+              <input type="email" id="emailInput" placeholder="you@example.com" autocomplete="email">
+              <svg class="field-ico" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            </div>
+            <span class="field-error" id="emailError">Please enter a valid email address.</span>
+          </div>
+          <!-- password -->
+          <div class="l-form-group" id="pwGroup">
+            <label class="form-label">Password</label>
+            <div class="input-wrap">
+              <input type="password" id="pwInput" placeholder="••••••••" autocomplete="current-password">
+              <svg class="field-ico" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <button type="button" class="eye-btn" onclick="togglePw('pwInput',this)" tabindex="-1">
+                <svg viewBox="0 0 24 24" stroke-width="1.8" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
+            <span class="field-error" id="pwError">Password must be at least 8 characters.</span>
+            <div class="strength-bar register-fields" id="strengthBar">
+              <div class="strength-seg" id="s1"></div><div class="strength-seg" id="s2"></div>
+              <div class="strength-seg" id="s3"></div><div class="strength-seg" id="s4"></div>
+            </div>
+          </div>
+          <!-- confirm (register) -->
+          <div class="l-form-group register-fields" id="confirmGroup">
+            <label class="form-label">Confirm password</label>
+            <div class="input-wrap">
+              <input type="password" id="confirmInput" placeholder="••••••••">
+              <svg class="field-ico" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </div>
+            <span class="field-error" id="confirmError">Passwords do not match.</span>
+          </div>
+          <!-- role (register) -->
+          <div class="l-form-group register-fields" id="roleGroup">
+            <label class="form-label">I am a</label>
+            <div class="input-wrap">
+              <select class="role-select" id="roleSelect">
+                <option value="">Select your role</option>
+                <option>Cricket Coach</option><option>Player / Athlete</option>
+                <option>Sports Analyst</option><option>Broadcaster</option>
+                <option>Researcher</option><option>Other</option>
+              </select>
+              <svg class="field-ico" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+            </div>
+          </div>
+          <!-- remember / forgot -->
+          <div class="options-row" id="loginOptions">
+            <label class="checkbox-wrap"><input type="checkbox" id="remember"><span>Remember me</span></label>
+            <a href="#" class="forgot-link" onclick="showForgot();return false;">Forgot password?</a>
+          </div>
+          <!-- terms (register) -->
+          <div class="register-fields" id="termsRow" style="margin-bottom:1.5rem">
+            <label class="checkbox-wrap">
+              <input type="checkbox" id="terms">
+              <span style="font-size:.82rem;color:var(--slate-200)">I agree to the <a href="#" style="color:var(--green-300);text-decoration:none">Terms</a> &amp; <a href="#" style="color:var(--green-300);text-decoration:none">Privacy Policy</a></span>
+            </label>
+          </div>
+          <button type="submit" class="btn-submit" id="submitBtn">
+            <span id="btnText">Sign in</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </button>
+        </form>
+
+        <!-- success -->
+        <div class="success-screen" id="successScreen">
+          <div class="success-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+          <div class="success-title" id="successTitle">Signed in!</div>
+          <div class="success-msg" id="successMsg">Welcome to CricketVision.<br>Taking you to the site…</div>
+        </div>
+
+        <div class="divider" id="dividerRow"><div class="divider-line"></div><div class="divider-text">or continue with</div><div class="divider-line"></div></div>
+        <div class="social-btns" id="socialRow">
+          <a href="#" class="btn-social" onclick="socialLogin('Google');return false;">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+            Google
+          </a>
+          <a href="#" class="btn-social" onclick="socialLogin('GitHub');return false;">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+            GitHub
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="login-footer">
+    <div class="footer-copy">© 2025 CricketVision Research. IEEE Access.</div>
+    <div class="footer-links">
+      <a href="#">Privacy</a><a href="#">Terms</a><a href="#contact-section" onclick="enterSite()">Contact</a>
+    </div>
+  </footer>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     MAIN SITE
+═══════════════════════════════════════════════════ -->
+<div id="main-page">
+
+  <!-- Fixed nav -->
+  <nav id="main-nav">
+    <a href="#hero" class="main-nav-logo">
+      <div class="nav-logo-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round">
+          <circle cx="12" cy="12" r="5"/><path d="M3 12h2M19 12h2M12 3v2M12 19v2"/>
+        </svg>
+      </div>
+      CricketVision
+    </a>
+    <ul class="nav-links">
+      <li><a href="#features">Features</a></li>
+      <li><a href="#stats">Results</a></li>
+      <li><a href="#pipeline">Pipeline</a></li>
+      <li><a href="#contact-section" class="nav-cta">Get in Touch</a></li>
+    </ul>
+    <button class="nav-logout" onclick="logout()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      Sign out
+    </button>
+  </nav>
+
+  <!-- HERO -->
+  <section id="hero">
+    <div class="hero-bg"></div>
+    <div class="hero-grid-bg"></div>
+    <div class="hero-content">
+      <div class="hero-tag"><div class="hero-tag-dot"></div>Deep Learning · Computer Vision · Sports Analytics</div>
+      <h1>Cricket analysis,<br><em>reimagined</em> with AI.</h1>
+      <p class="hero-desc">CricketVision automatically extracts front pitch view shots, tracks the ball in real-time, and classifies deliveries — from standard broadcast footage, no special cameras required.</p>
+      <div class="hero-actions">
+        <a href="#features" class="btn-primary">Explore Features <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg></a>
+        <a href="#stats" class="btn-secondary">View Results</a>
+      </div>
+      <div class="hero-stats">
+        <div><div class="hero-stat-val">99.96<span>%</span></div><div class="hero-stat-label">Classification accuracy</div></div>
+        <div><div class="hero-stat-val">197<span>+</span></div><div class="hero-stat-label">Frames per second</div></div>
+        <div><div class="hero-stat-val">10<span>k</span></div><div class="hero-stat-label">Annotated frames</div></div>
+        <div><div class="hero-stat-val">100<span>%</span></div><div class="hero-stat-label">Replay detection rate</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- MARQUEE -->
+  <div class="marquee-wrap">
+    <div class="marquee">
+      <span class="marquee-item">FPV Shot Extraction<span class="marquee-dot"></span></span>
+      <span class="marquee-item">Ball Trajectory Tracking<span class="marquee-dot"></span></span>
+      <span class="marquee-item">Delivery Classification<span class="marquee-dot"></span></span>
+      <span class="marquee-item">Pitch & Umpire Detection<span class="marquee-dot"></span></span>
+      <span class="marquee-item">Replay Identification<span class="marquee-dot"></span></span>
+      <span class="marquee-item">YOLOv11 · DETR · ViT<span class="marquee-dot"></span></span>
+      <span class="marquee-item">Highlight Generation<span class="marquee-dot"></span></span>
+      <span class="marquee-item">Coaching Analytics<span class="marquee-dot"></span></span>
+      <span class="marquee-item">FPV Shot Extraction<span class="marquee-dot"></span></span>
+      <span class="marquee-item">Ball Trajectory Tracking<span class="marquee-dot"></span></span>
+      <span class="marquee-item">Delivery Classification<span class="marquee-dot"></span></span>
+      <span class="marquee-item">Pitch & Umpire Detection<span class="marquee-dot"></span></span>
+      <span class="marquee-item">Replay Identification<span class="marquee-dot"></span></span>
+      <span class="marquee-item">YOLOv11 · DETR · ViT<span class="marquee-dot"></span></span>
+      <span class="marquee-item">Highlight Generation<span class="marquee-dot"></span></span>
+      <span class="marquee-item">Coaching Analytics<span class="marquee-dot"></span></span>
+    </div>
+  </div>
+
+  <!-- FEATURES -->
+  <section id="features">
+    <div class="features-header reveal">
+      <div class="section-tag">Core capabilities</div>
+      <h2 class="section-title">Everything you need<br>to analyse the game</h2>
+      <p class="section-subtitle">A unified deep learning pipeline that works directly on broadcast video — no sensors, no specialised cameras, no manual annotation.</p>
+    </div>
+    <div class="features-grid reveal">
+      <div class="feature-card">
+        <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div>
+        <div class="feature-title">FPV Shot Extraction</div>
+        <div class="feature-desc">Automatically isolates front pitch view clips from hours of broadcast footage — capturing every ball delivery and batter stroke with precision.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.93 4.93l2.12 2.12M16.95 16.95l2.12 2.12M4.93 19.07l2.12-2.12M16.95 7.05l2.12-2.12"/></svg></div>
+        <div class="feature-title">Real-time Ball Tracking</div>
+        <div class="feature-desc">Tracks the cricket ball frame-by-frame from release to bounce, even at speeds up to 90 mph, using YOLOv11 with a shortest-distance algorithm.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
+        <div class="feature-title">Delivery Classification</div>
+        <div class="feature-desc">Classifies every delivery as full-pitched, good-length, or short-pitched by computing the 3D bounce position from a single 2D broadcast camera.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></div>
+        <div class="feature-title">Pitch & Umpire Detection</div>
+        <div class="feature-desc">DETR and YOLO object detectors identify pitch boundaries and umpire position as a secondary validation layer, achieving near-perfect precision.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></div>
+        <div class="feature-title">Replay Identification</div>
+        <div class="feature-desc">Detects the broadcast scorecard to distinguish live deliveries from replays, ensuring datasets contain only unique, non-duplicated ball deliveries.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+        <div class="feature-title">Coaching & Player Insights</div>
+        <div class="feature-desc">Generates structured datasets of ball deliveries and stroke plays ready for coaching review, commentary generation, and tactical analysis.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STATS -->
+  <section id="stats">
+    <div class="stats-bg"></div>
+    <div class="stats-inner">
+      <div class="stats-header reveal">
+        <div class="section-tag">Benchmark results</div>
+        <h2 class="section-title">Numbers that speak<br>for themselves</h2>
+        <p class="section-subtitle">Validated on 10,000 manually annotated frames across multiple match formats, broadcasters, and venues.</p>
+      </div>
+      <div class="stats-grid reveal">
+        <div class="stat-card"><div class="stat-num">99.96<em>%</em></div><div class="stat-label">Peak F1 — FPV classification</div></div>
+        <div class="stat-card"><div class="stat-num">197<em>fps</em></div><div class="stat-label">Fastest inference (ViT base)</div></div>
+        <div class="stat-card"><div class="stat-num">91.7<em>%</em></div><div class="stat-label">mAP@50 — ball tracking</div></div>
+        <div class="stat-card"><div class="stat-num">1,446</div><div class="stat-label">Video shots processed</div></div>
+      </div>
+      <div class="accuracy-row reveal">
+        <div class="acc-block">
+          <div class="acc-title">FPV classifier F1 scores</div>
+          <div class="acc-bar-row"><div class="acc-bar-top"><span class="acc-bar-name">ResNet-152</span><span class="acc-bar-pct">99.86%</span></div><div class="acc-track"><div class="acc-fill" style="width:99.86%"></div></div></div>
+          <div class="acc-bar-row"><div class="acc-bar-top"><span class="acc-bar-name">MobileNetV3 Small</span><span class="acc-bar-pct">99.84%</span></div><div class="acc-track"><div class="acc-fill" style="width:99.84%"></div></div></div>
+          <div class="acc-bar-row"><div class="acc-bar-top"><span class="acc-bar-name">DenseNet-121</span><span class="acc-bar-pct">99.80%</span></div><div class="acc-track"><div class="acc-fill" style="width:99.80%"></div></div></div>
+          <div class="acc-bar-row"><div class="acc-bar-top"><span class="acc-bar-name">Swin Base Patch4</span><span class="acc-bar-pct">99.74%</span></div><div class="acc-track"><div class="acc-fill" style="width:99.74%"></div></div></div>
+          <div class="acc-bar-row"><div class="acc-bar-top"><span class="acc-bar-name">ViT Base Patch16</span><span class="acc-bar-pct">98.90%</span></div><div class="acc-track"><div class="acc-fill" style="width:98.90%"></div></div></div>
+        </div>
+        <div class="acc-block">
+          <div class="acc-title">Object detector performance (mAP)</div>
+          <div class="acc-bar-row"><div class="acc-bar-top"><span class="acc-bar-name">DETR ResNet-50</span><span class="acc-bar-pct">99.86%</span></div><div class="acc-track"><div class="acc-fill" style="width:99.86%"></div></div></div>
+          <div class="acc-bar-row"><div class="acc-bar-top"><span class="acc-bar-name">DETR ResNet-101</span><span class="acc-bar-pct">99.86%</span></div><div class="acc-track"><div class="acc-fill" style="width:99.86%"></div></div></div>
+          <div class="acc-bar-row"><div class="acc-bar-top"><span class="acc-bar-name">YOLOv11 Tiny</span><span class="acc-bar-pct">99.82%</span></div><div class="acc-track"><div class="acc-fill" style="width:99.82%"></div></div></div>
+          <div class="acc-bar-row"><div class="acc-bar-top"><span class="acc-bar-name">YOLOv11 Medium</span><span class="acc-bar-pct">99.80%</span></div><div class="acc-track"><div class="acc-fill" style="width:99.80%"></div></div></div>
+          <div class="acc-bar-row"><div class="acc-bar-top"><span class="acc-bar-name">YOLOv11 Small</span><span class="acc-bar-pct">99.76%</span></div><div class="acc-track"><div class="acc-fill" style="width:99.76%"></div></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PIPELINE -->
+  <section id="pipeline">
+    <div class="pipeline-header reveal">
+      <div class="section-tag">How it works</div>
+      <h2 class="section-title">A five-stage pipeline<br>from broadcast to insight</h2>
+      <p class="section-subtitle">Each stage builds on the last — from raw video ingestion to classified delivery data ready for coaches and analysts.</p>
+    </div>
+    <div class="pipeline-steps reveal">
+      <div class="pipeline-step"><div class="step-circle">01</div><div class="step-title">Video Ingestion</div><div class="step-desc">Raw broadcast video loaded directly — no pre-processing, no special encoding requirements.</div></div>
+      <div class="pipeline-step"><div class="step-circle">02</div><div class="step-title">FPV Detection</div><div class="step-desc">Dual-stage classifier and object detector run in parallel to isolate front pitch view frames with 100% effective accuracy.</div></div>
+      <div class="pipeline-step"><div class="step-circle">03</div><div class="step-title">Shot Boundary</div><div class="step-desc">BackgroundSubtractor identifies scene changes and scorecard detection filters live deliveries from replays.</div></div>
+      <div class="pipeline-step"><div class="step-circle">04</div><div class="step-title">Ball Tracking</div><div class="step-desc">YOLOv11 tracks the ball through each FPV shot and detects the 2D bounce point on the pitch surface.</div></div>
+      <div class="pipeline-step"><div class="step-circle">05</div><div class="step-title">Delivery Class.</div><div class="step-desc">Zoom estimation converts the 2D bounce position to 3D and classifies each delivery as full, good-length, or short.</div></div>
+    </div>
+  </section>
+
+  <!-- CONTACT -->
+  <section id="contact-section">
+    <div class="contact-grid">
+      <div class="contact-info reveal">
+        <div class="section-tag">Get in touch</div>
+        <h2 class="section-title">Work with the<br>research team</h2>
+        <p class="section-subtitle">Interested in collaboration, licensing the datasets, or deploying CricketVision for your team? Reach out — we'd love to hear from you.</p>
+        <div style="margin-top:2.5rem">
+          <div class="contact-detail">
+            <div class="contact-detail-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></div>
+            <div><div class="contact-detail-label">Email</div><div class="contact-detail-val">saeed@uok.edu.pk</div></div>
+          </div>
+          <div class="contact-detail">
+            <div class="contact-detail-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg></div>
+            <div><div class="contact-detail-label">GitHub</div><div class="contact-detail-val">github.com/KumailAbb/FPVShotDetection</div></div>
+          </div>
+          <div class="contact-detail">
+            <div class="contact-detail-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></div>
+            <div><div class="contact-detail-label">Institutions</div><div class="contact-detail-val">University of Karachi · Victoria University, Melbourne</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="reveal">
+        <form class="contact-form" onsubmit="handleContactSubmit(event)">
+          <div class="form-row">
+            <div class="form-group"><label for="cfname">First name</label><input type="text" id="cfname" placeholder="Alex" required></div>
+            <div class="form-group"><label for="clname">Last name</label><input type="text" id="clname" placeholder="Kumar" required></div>
+          </div>
+          <div class="form-group"><label for="cemail">Email address</label><input type="email" id="cemail" placeholder="alex@club.com" required></div>
+          <div class="form-group">
+            <label for="cinterest">Area of interest</label>
+            <select id="cinterest"><option value="">Select an option</option><option>Dataset licensing</option><option>Research collaboration</option><option>Commercial deployment</option><option>Coaching tools</option><option>Other</option></select>
+          </div>
+          <div class="form-group"><label for="cmessage">Message</label><textarea id="cmessage" placeholder="Tell us about your use case or project..."></textarea></div>
+          <button type="submit" class="form-submit" id="contactBtn">
+            Send message
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </button>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div>
+      <a href="#hero" class="main-nav-logo" style="margin-bottom:.5rem;display:inline-flex;">
+        <div class="nav-logo-icon"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><path d="M3 12h2M19 12h2M12 3v2M12 19v2"/></svg></div>
+        CricketVision
+      </a>
+      <div class="footer-copy" style="margin-top:.5rem">© 2025 CricketVision Research. Published in IEEE Access.</div>
+    </div>
+    <div class="footer-links">
+      <a href="#features">Features</a><a href="#stats">Results</a><a href="#pipeline">Pipeline</a>
+      <a href="https://github.com/KumailAbb/FPVShotDetection">GitHub</a><a href="#contact-section">Contact</a>
+    </div>
+  </footer>
+</div><!-- end #main-page -->
+
+<script>
+/* ═══════════════════════════════════════
+   CURSOR
+═══════════════════════════════════════ */
+const cursor = document.getElementById('cv-cursor');
+const trail  = document.getElementById('cv-trail');
+let mx=-100,my=-100,tx=-100,ty=-100,rot=0,lastX=-100;
+
+document.addEventListener('mousemove',e=>{
+  mx=e.clientX; my=e.clientY;
+  const dx=mx-lastX; rot+=dx*1.1;
+  cursor.querySelector('svg').style.transform=`rotate(${rot}deg)`;
+  lastX=mx;
+  cursor.style.left=mx+'px'; cursor.style.top=my+'px';
+});
+(function animT(){
+  tx+=(mx-tx)*.16; ty+=(my-ty)*.16;
+  trail.style.left=tx+'px'; trail.style.top=ty+'px';
+  requestAnimationFrame(animT);
+})();
+document.addEventListener('mousedown',()=>cursor.classList.add('clicking'));
+document.addEventListener('mouseup',()=>cursor.classList.remove('clicking'));
+window.addEventListener('scroll',()=>{
+  rot+=window.scrollY*0.002;
+  cursor.querySelector('svg').style.transform=`rotate(${rot}deg)`;
+});
+
+function bindHover(root){
+  root.querySelectorAll('a,button,input,textarea,select,.feature-card,.stat-card,.pipeline-step,.feature-pill').forEach(el=>{
+    el.addEventListener('mouseenter',()=>cursor.classList.add('hovering'));
+    el.addEventListener('mouseleave',()=>cursor.classList.remove('hovering'));
+  });
+  root.querySelectorAll('.btn-primary,.btn-secondary,.nav-cta,.form-submit,.btn-submit,.btn-social,.auth-tab,.form-submit').forEach(el=>{
+    el.style.position='relative'; el.style.overflow='hidden';
+    el.addEventListener('click',function(e){
+      const r=document.createElement('span');
+      r.className='cv-ripple';
+      const rect=this.getBoundingClientRect(),size=Math.max(rect.width,rect.height);
+      r.style.cssText=`width:${size}px;height:${size}px;left:${e.clientX-rect.left-size/2}px;top:${e.clientY-rect.top-size/2}px;position:absolute;`;
+      this.appendChild(r); setTimeout(()=>r.remove(),600);
+    });
+  });
+}
+bindHover(document);
+
+/* ═══════════════════════════════════════
+   LOGIN LOGIC
+═══════════════════════════════════════ */
+let currentTab='login';
+
+function switchTab(tab){
+  currentTab=tab; const isReg=tab==='register';
+  document.getElementById('tab-login').classList.toggle('active',!isReg);
+  document.getElementById('tab-register').classList.toggle('active',isReg);
+  document.querySelectorAll('.register-fields').forEach(el=>el.classList.toggle('active',isReg));
+  document.getElementById('loginOptions').style.display=isReg?'none':'flex';
+  document.getElementById('formTitle').textContent=isReg?'Create your account':'Welcome back';
+  document.getElementById('formSubtitle').innerHTML=isReg
+    ?'Already have one? <a href="#" onclick="switchTab(\'login\');return false;">Sign in</a>'
+    :'No account? <a href="#" onclick="switchTab(\'register\');return false;">Create one free</a>';
+  document.getElementById('btnText').textContent=isReg?'Create account':'Sign in';
+  document.getElementById('pwInput').setAttribute('autocomplete',isReg?'new-password':'current-password');
+  clearErrors();
+}
+
+function togglePw(id,btn){
+  const inp=document.getElementById(id),isT=inp.type==='text';
+  inp.type=isT?'password':'text';
+  btn.querySelector('svg').innerHTML=isT
+    ?'<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>'
+    :'<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>';
+}
+
+document.getElementById('pwInput').addEventListener('input',function(){
+  if(currentTab!=='register')return;
+  const v=this.value; let s=0;
+  if(v.length>=8)s++; if(/[A-Z]/.test(v))s++; if(/[0-9]/.test(v))s++; if(/[^A-Za-z0-9]/.test(v))s++;
+  const c=['#e05c5c','#BA7517','#1D9E75','#5DCAA5'];
+  for(let i=1;i<=4;i++) document.getElementById('s'+i).style.background=i<=s?c[s-1]:'rgba(255,255,255,.08)';
+});
+
+function clearErrors(){document.querySelectorAll('.l-form-group').forEach(g=>g.classList.remove('has-error'))}
+
+function validate(){
+  clearErrors(); let ok=true;
+  const email=document.getElementById('emailInput').value.trim();
+  const pw=document.getElementById('pwInput').value;
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){document.getElementById('emailGroup').classList.add('has-error');ok=false;}
+  if(pw.length<8){document.getElementById('pwGroup').classList.add('has-error');ok=false;}
+  if(currentTab==='register'){
+    const conf=document.getElementById('confirmInput').value;
+    if(conf!==pw){document.getElementById('confirmGroup').classList.add('has-error');ok=false;}
+  }
+  return ok;
+}
+
+function enterSite(){
+  const lp=document.getElementById('login-page');
+  const mp=document.getElementById('main-page');
+  lp.classList.add('exit');
+  mp.classList.add('active');
+  document.body.style.overflowY='auto';
+  setTimeout(()=>{lp.style.display='none'; initMainSite();},650);
+}
+
+function handleSubmit(e){
+  e.preventDefault();
+  if(!validate())return;
+  const btn=document.getElementById('submitBtn');
+  btn.classList.add('loading');
+  document.getElementById('btnText').textContent=currentTab==='register'?'Creating account…':'Signing in…';
+  setTimeout(()=>{
+    document.getElementById('authForm').style.display='none';
+    document.getElementById('dividerRow').style.display='none';
+    document.getElementById('socialRow').style.display='none';
+    const ss=document.getElementById('successScreen');
+    ss.style.display='flex';
+    if(currentTab==='register'){
+      document.getElementById('successTitle').textContent='Account created!';
+      document.getElementById('successMsg').textContent='Welcome to CricketVision. Taking you to the site…';
+    }
+    setTimeout(enterSite,1600);
+  },1400);
+}
+
+function socialLogin(provider){
+  const btn=document.getElementById('submitBtn');
+  btn.classList.add('loading');
+  document.getElementById('btnText').textContent=`Connecting to ${provider}…`;
+  setTimeout(()=>{
+    document.getElementById('authForm').style.display='none';
+    document.getElementById('dividerRow').style.display='none';
+    document.getElementById('socialRow').style.display='none';
+    document.getElementById('successScreen').style.display='flex';
+    setTimeout(enterSite,1600);
+  },1200);
+}
+
+function showForgot(){
+  const emailVal=document.getElementById('emailInput').value.trim();
+  if(!emailVal){document.getElementById('emailInput').focus();return;}
+  document.getElementById('authForm').style.display='none';
+  document.getElementById('dividerRow').style.display='none';
+  document.getElementById('socialRow').style.display='none';
+  document.getElementById('successTitle').textContent='Check your inbox';
+  document.getElementById('successMsg').textContent=`A reset link has been sent to ${emailVal}.`;
+  document.getElementById('successScreen').style.display='flex';
+}
+
+function logout(){
+  const mp=document.getElementById('main-page');
+  const lp=document.getElementById('login-page');
+  mp.classList.remove('active');
+  lp.style.display='flex'; lp.classList.remove('exit');
+  document.body.style.overflowY='hidden';
+  window.scrollTo(0,0);
+  // reset form
+  document.getElementById('authForm').style.display='block';
+  document.getElementById('dividerRow').style.display='flex';
+  document.getElementById('socialRow').style.display='flex';
+  document.getElementById('successScreen').style.display='none';
+  const btn=document.getElementById('submitBtn');
+  btn.classList.remove('loading');
+  document.getElementById('btnText').textContent='Sign in';
+  document.getElementById('authForm').reset();
+  clearErrors();
+}
+
+/* ═══════════════════════════════════════
+   MAIN SITE INIT
+═══════════════════════════════════════ */
+function initMainSite(){
+  // scroll reveals
+  const revealEls=document.querySelectorAll('.reveal');
+  const obs=new IntersectionObserver(entries=>{
+    entries.forEach((e,i)=>{
+      if(e.isIntersecting){setTimeout(()=>e.target.classList.add('visible'),i*80);obs.unobserve(e.target);}
+    });
+  },{threshold:.1});
+  revealEls.forEach(el=>obs.observe(el));
+  bindHover(document.getElementById('main-page'));
+}
+
+// prevent body scroll while login is showing
+document.body.style.overflowY='hidden';
+</script>
+</body>
+</html>
